@@ -5,7 +5,7 @@ from typing import List
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.output_parsers import JsonOutputParser
 
 load_dotenv()
@@ -121,12 +121,26 @@ class AgentOrchestrator:
                     "**중요 지침:**\n"
                     "1. 마크다운 기호(##, ###, **, *, - 등)를 절대 사용하지 마세요.\n"
                     "2. 가독성을 위해 단락 구분은 오직 줄바꿈(Enter)으로만 하세요.\n"
-                    "3. 텍스트로만 구성된 평문(Plain Text) 형식으로 답변하세요."
+                    "3. 텍스트로만 구성된 평문(Plain Text) 형식으로 답변하세요.\n"
+                    "4. 답변은 반드시 5문장 이내로 핵심만 간결하게 작성하세요."
                 )),
                 HumanMessage(content=f"요약: {current_context}\n질문: {self.request.topic_question}\n전문적인 의견을 작성하세요.")
             ]
             response = await llm.ainvoke(agent_messages)
             answer = response.content
+            
+            # 길이 제약 조건을 위반했을 경우 재요약 요청
+            retry_count = 0
+            max_retries = 3
+            while len(answer) > 400 and retry_count < max_retries:
+                retry_count += 1
+                print(f"[{role.role_name}] 답변 길이 초과로 재요약 수행 ({retry_count}/{max_retries})...")
+                retry_messages = agent_messages + [
+                    AIMessage(content=answer),
+                    HumanMessage(content="답변이 너무 깁니다. 반드시 5문장 이내로 다시 요약해주세요.")
+                ]
+                response = await llm.ainvoke(retry_messages)
+                answer = response.content
             
             # 백엔드에 현재 답변 전송
             is_final = (i == len(roles) - 1)
@@ -162,3 +176,5 @@ async def start_agents(request: AgentRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
+# TODO: 백엔드에 보내는 agent 응답 요약

@@ -11,8 +11,42 @@ from langchain_core.output_parsers import JsonOutputParser
 
 load_dotenv()
 backend_url = os.getenv("backend_url")
+if not backend_url:
+    print("경고: .env 파일에 'backend_url'이 설정되지 않았습니다.")
+
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
 app = FastAPI(title="Dynamic Multi-Agent AI Server")
+
+# 프롬프트 템플릿 정의
+PROMPT_TEAM_BUILDER_SYSTEM = "당신은 전문적인 AI 팀 빌더입니다. 반드시 JSON 리스트 형식으로만 응답하세요."
+PROMPT_TEAM_BUILDER_USER_TEMPLATE = (
+    "질문: '{topic_question}'\n"
+    "위 질문을 해결하기 위한 서로 다른 전문가 {agent_count}명을 구성하세요.\n"
+    "각 전문가에게는 역할에 어울리는 친근한 이름(예: John, James, Jenny, Emily 등)을 부여하세요.\n"
+    "응답 형식 예시: [{{ \"name\": \"이름\", \"role\": \"직업\", \"prompt\": \"설명\" }}]"
+)
+
+PROMPT_SUMMARY_SYSTEM = (
+    "당신은 기술 전문가들을 위한 정보 요약가입니다.\n"
+    "**작성 지침:**\n"
+    "1. 마크다운 기호(##, **, *)를 절대 사용하지 마세요.\n"
+    "2. 반드시 '핵심 키워드:' 섹션을 먼저 작성하고, 그 아래에 요약 내용을 작성하세요.\n"
+    "3. 요약은 이전 전문가 답변에서 새롭게 등장한 중요 개념 위주로 3문장 이내로 작성하세요.\n"
+    "4. 모든 답변은 텍스트로만 구성된 평문(Plain Text)이어야 합니다."
+)
+PROMPT_SUMMARY_USER_TEMPLATE = "기존 맥락: {current_summary}\n새로운 전문가 답변: {new_content}\n\n위 내용을 요약하세요."
+
+PROMPT_AGENT_SYSTEM_TEMPLATE = (
+    "당신은 {name}입니다. {prompt}\n"
+    "**중요 지침:**\n"
+    "1. 마크다운 기호(##, ###, **, *, - 등)를 절대 사용하지 마세요.\n"
+    "2. 가독성을 위해 단락 구분은 오직 줄바꿈(Enter)으로만 하세요.\n"
+    "3. 텍스트로만 구성된 평문(Plain Text) 형식으로 답변하세요.\n"
+    "4. 답변은 반드시 5문장 이내로 핵심만 간결하게 작성하세요."
+)
+PROMPT_AGENT_USER_TEMPLATE = "요약: {context}\n질문: {question}\n전문적인 의견을 작성하세요."
+
+PROMPT_RETRY_LENGTH = "답변이 너무 깁니다. 반드시 5문장 이내로 다시 요약해주세요."
 
 class AgentInfo(BaseModel):
     name: str
@@ -65,12 +99,10 @@ class AgentOrchestrator:
         parser = JsonOutputParser(pydantic_object=AgentInfo)
         
         messages = [
-            SystemMessage(content="당신은 전문적인 AI 팀 빌더입니다. 반드시 JSON 리스트 형식으로만 응답하세요."),
-            HumanMessage(content=(
-                f"질문: '{self.request.topic_question}'\n"
-                f"위 질문을 해결하기 위한 서로 다른 전문가 {self.request.agent_count}명을 구성하세요.\n"
-                "각 전문가에게는 역할에 어울리는 친근한 이름(예: John, James, Jenny, Emily 등)을 부여하세요.\n"
-                "응답 형식 예시: [{\"name\": \"이름\", \"role\": \"직업\", \"prompt\": \"설명\"}]"
+            SystemMessage(content=PROMPT_TEAM_BUILDER_SYSTEM),
+            HumanMessage(content=PROMPT_TEAM_BUILDER_USER_TEMPLATE.format(
+                topic_question=self.request.topic_question,
+                agent_count=self.request.agent_count
             ))
         ]
 
@@ -93,15 +125,11 @@ class AgentOrchestrator:
         """핵심 키워드와 함께 내용을 3문장 이내로 압축 요약"""
         
         messages = [
-            SystemMessage(content=(
-                "당신은 기술 전문가들을 위한 정보 요약가입니다.\n"
-                "**작성 지침:**\n"
-                "1. 마크다운 기호(##, **, *)를 절대 사용하지 마세요.\n"
-                "2. 반드시 '핵심 키워드:' 섹션을 먼저 작성하고, 그 아래에 요약 내용을 작성하세요.\n"
-                "3. 요약은 이전 전문가 답변에서 새롭게 등장한 중요 개념 위주로 3문장 이내로 작성하세요.\n"
-                "4. 모든 답변은 텍스트로만 구성된 평문(Plain Text)이어야 합니다."
-            )),
-            HumanMessage(content=f"기존 맥락: {current_summary}\n새로운 전문가 답변: {new_content}\n\n위 내용을 요약하세요.")
+            SystemMessage(content=PROMPT_SUMMARY_SYSTEM),
+            HumanMessage(content=PROMPT_SUMMARY_USER_TEMPLATE.format(
+                current_summary=current_summary,
+                new_content=new_content
+            ))
         ]
         response = await llm.ainvoke(messages)
         summary = response.content.strip()
@@ -129,15 +157,11 @@ class AgentOrchestrator:
             
             # 에이전트 호출 메시지 구조
             agent_messages = [
-                SystemMessage(content=(
-                    f"당신은 {role.name}입니다. {role.prompt}\n"
-                    "**중요 지침:**\n"
-                    "1. 마크다운 기호(##, ###, **, *, - 등)를 절대 사용하지 마세요.\n"
-                    "2. 가독성을 위해 단락 구분은 오직 줄바꿈(Enter)으로만 하세요.\n"
-                    "3. 텍스트로만 구성된 평문(Plain Text) 형식으로 답변하세요.\n"
-                    "4. 답변은 반드시 5문장 이내로 핵심만 간결하게 작성하세요."
+                SystemMessage(content=PROMPT_AGENT_SYSTEM_TEMPLATE.format(
+                    name=role.name,
+                    prompt=role.prompt
                 )),
-                HumanMessage(content=f"요약: {current_context}\n질문: {self.request.topic_question}\n전문적인 의견을 작성하세요.")
+                HumanMessage(content=PROMPT_AGENT_USER_TEMPLATE.format(context=current_context, question=self.request.topic_question))
             ]
             response = await llm.ainvoke(agent_messages)
             answer = response.content
@@ -150,7 +174,7 @@ class AgentOrchestrator:
                 print(f"[{role.name}] 답변 길이 초과로 재요약 수행 ({retry_count}/{max_retries})...")
                 retry_messages = agent_messages + [
                     AIMessage(content=answer),
-                    HumanMessage(content="답변이 너무 깁니다. 반드시 5문장 이내로 다시 요약해주세요.")
+                    HumanMessage(content=PROMPT_RETRY_LENGTH)
                 ]
                 response = await llm.ainvoke(retry_messages)
                 answer = response.content

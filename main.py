@@ -175,7 +175,7 @@ class AgentOrchestrator:
 
         return {"status": "success", "result": final_result}
     
-@app.post("/run")
+@app.post("/agent/run")
 async def start_agents(request: AgentRequest):
     if request.agent_auto and request.agent_count < 1:
         raise HTTPException(status_code=400, detail="자동 모드 시 에이전트는 최소 1명 이상이어야 합니다.")

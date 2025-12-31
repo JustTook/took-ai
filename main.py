@@ -193,6 +193,3 @@ async def start_agents(request: AgentRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=5000)
-
-# TODO: API KEY 변경
-# TODO: gemini -> vertex 변경

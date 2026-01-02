@@ -58,7 +58,6 @@ class AgentRequest(BaseModel):
     topic_question: str
     agent_auto: bool
     agent_info: List[AgentInfo] = []
-    agent_count: int = 3
 
 class BackendUpdate(BaseModel):
     topic_id: str
@@ -71,6 +70,10 @@ class AgentOrchestrator:
     def __init__(self, request: AgentRequest):
         self.request = request
         self.backend_url = BACKEND_URL
+        if self.request.agent_auto:
+            self.agent_count = 3
+        else:
+            self.agent_count = len(self.request.agent_info)
 
     async def _send_to_backend(self, data: BackendUpdate):
         """백엔드 서버로 데이터를 전송하는 유틸리티 함수"""
@@ -102,7 +105,7 @@ class AgentOrchestrator:
             SystemMessage(content=PROMPT_TEAM_BUILDER_SYSTEM),
             HumanMessage(content=PROMPT_TEAM_BUILDER_USER_TEMPLATE.format(
                 topic_question=self.request.topic_question,
-                agent_count=self.request.agent_count
+                agent_count=self.agent_count
             ))
         ]
 
@@ -141,7 +144,7 @@ class AgentOrchestrator:
     async def run_workflow(self):
         """전체 순차 워크플로우 실행"""
         if self.request.agent_auto:
-            print(f"에이전트 팀 구성 중... (목표: {self.request.agent_count}명)")
+            print(f"에이전트 팀 구성 중... (목표: {self.agent_count}명)")
             roles = await self.generate_roles()
         else:
             print(f"수동 에이전트 설정 사용: {len(self.request.agent_info)}명")
@@ -201,8 +204,6 @@ class AgentOrchestrator:
     
 @app.post("/agent/run")
 async def start_agents(request: AgentRequest):
-    if request.agent_auto and request.agent_count < 1:
-        raise HTTPException(status_code=400, detail="자동 모드 시 에이전트는 최소 1명 이상이어야 합니다.")
     if not request.agent_auto and not request.agent_info:
         raise HTTPException(status_code=400, detail="수동 모드 시 에이전트 정보가 필요합니다.")
 

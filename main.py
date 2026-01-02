@@ -10,9 +10,9 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.output_parsers import JsonOutputParser
 
 load_dotenv()
-backend_url = os.getenv("backend_url")
-if not backend_url:
-    print("경고: .env 파일에 'backend_url'이 설정되지 않았습니다.")
+BACKEND_URL = os.getenv("BACKEND_URL")
+if not BACKEND_URL:
+    print("경고: .env 파일에 'BACKEND_URL'이 설정되지 않았습니다.")
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
 app = FastAPI(title="Dynamic Multi-Agent AI Server")
@@ -70,7 +70,7 @@ class BackendUpdate(BaseModel):
 class AgentOrchestrator:
     def __init__(self, request: AgentRequest):
         self.request = request
-        self.backend_url = backend_url
+        self.backend_url = BACKEND_URL
 
     async def _send_to_backend(self, data: BackendUpdate):
         """백엔드 서버로 데이터를 전송하는 유틸리티 함수"""

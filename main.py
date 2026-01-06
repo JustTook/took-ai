@@ -2,7 +2,7 @@ import os
 import httpx
 from datetime import datetime
 from dotenv import load_dotenv
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -70,6 +70,13 @@ class AgentRequest(BaseModel):
     topic_question: str
     agent_auto: bool
     agent_info: List[AgentInfo] = []
+    topic_summary: Optional[str] = None
+
+class AgentReplyRequest(BaseModel):
+    topic_id: str
+    topic_question: str
+    topic_summary: str
+    agent_info: List[AgentInfo]
 
 class BackendUpdate(BaseModel):
     topic_id: str
@@ -169,7 +176,13 @@ class AgentOrchestrator:
         else:
             roles = self.request.agent_info
             
-        current_context = "시작 단계입니다."
+        print(f"구성 완료: {[role.name for role in roles]}")
+        
+        if self.request.topic_summary:
+            current_context = f"이전 대화 요약: {self.request.topic_summary}"
+        else:
+            current_context = "시작 단계입니다."
+            
         all_agent_responses = []
 
         for i, role in enumerate(roles):
@@ -230,7 +243,7 @@ class AgentOrchestrator:
 
         return {"status": "success", "result": final_summary}
     
-@app.post("/agent/run")
+@app.post("/agent/run/init")
 async def start_agents(request: AgentRequest):
     if not request.agent_auto and not request.agent_info:
         raise HTTPException(status_code=400, detail="수동 모드 시 에이전트 정보가 필요합니다.")
@@ -239,6 +252,25 @@ async def start_agents(request: AgentRequest):
     try:
         result = await orchestrator.run_workflow()
         return result
+    except Exception as e:
+        print(f"서버 내부 에러: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/agent/run/reply")
+async def continue_agents(request: AgentReplyRequest):
+    # AgentReplyRequest를 AgentRequest로 변환 (수동 모드 고정)
+    internal_request = AgentRequest(
+        topic_id=request.topic_id,
+        topic_question=request.topic_question,
+        agent_auto=False,
+        agent_info=request.agent_info,
+        topic_summary=request.topic_summary
+    )
+
+    orchestrator = AgentOrchestrator(internal_request)
+    try:
+        await orchestrator.run_workflow()
+        return {"status": "success"}
     except Exception as e:
         print(f"서버 내부 에러: {e}")
         raise HTTPException(status_code=500, detail=str(e))

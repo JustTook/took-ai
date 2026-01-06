@@ -3,7 +3,7 @@ import httpx
 from datetime import datetime
 from dotenv import load_dotenv
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from fastapi import FastAPI, HTTPException
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -77,6 +77,13 @@ class AgentReplyRequest(BaseModel):
     topic_question: str
     topic_summary: str
     agent_info: List[AgentInfo]
+
+    @field_validator('topic_summary')
+    @classmethod
+    def check_summary_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('이전 대화 요약(topic_summary)은 필수입니다.')
+        return v
 
 class BackendUpdate(BaseModel):
     topic_id: str

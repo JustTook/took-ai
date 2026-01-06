@@ -48,6 +48,18 @@ PROMPT_AGENT_USER_TEMPLATE = "요약: {context}\n질문: {question}\n전문적�
 
 PROMPT_RETRY_LENGTH = "답변이 너무 깁니다. 반드시 5문장 이내로 다시 요약해주세요."
 
+PROMPT_FINAL_SUMMARY_SYSTEM = (
+    "당신은 전체 토론 내용을 종합하여 최종 결론을 내리는 진행자입니다.\n"
+    "**작성 지침:**\n"
+    "1. 전체 전문가들의 의견을 종합하여 7줄 내외로 요약하세요.\n"
+    "2. 마크다운 없이 평문(Plain Text)으로 작성하세요."
+)
+PROMPT_FINAL_SUMMARY_USER_TEMPLATE = (
+    "질문: {question}\n\n"
+    "전문가 답변 모음:\n{all_answers}\n\n"
+    "위 내용을 바탕으로 최종 요약을 작성하세요."
+)
+
 class AgentInfo(BaseModel):
     name: str
     role: str
@@ -65,6 +77,7 @@ class BackendUpdate(BaseModel):
     role: str
     contents: str
     timestamp: str
+    is_final: bool
 
 class AgentOrchestrator:
     def __init__(self, request: AgentRequest):
@@ -141,6 +154,18 @@ class AgentOrchestrator:
 
         return summary
     
+    async def generate_final_summary(self, all_answers: str) -> str:
+        """모든 답변을 종합하여 최종 요약 생성"""
+        messages = [
+            SystemMessage(content=PROMPT_FINAL_SUMMARY_SYSTEM),
+            HumanMessage(content=PROMPT_FINAL_SUMMARY_USER_TEMPLATE.format(
+                question=self.request.topic_question,
+                all_answers=all_answers
+            ))
+        ]
+        response = await llm.ainvoke(messages)
+        return response.content.strip()
+
     async def run_workflow(self):
         """전체 순차 워크플로우 실행"""
         if self.request.agent_auto:
@@ -153,7 +178,7 @@ class AgentOrchestrator:
         print(f"구성 완료: {[role.name for role in roles]}")
         
         current_context = "시작 단계입니다."
-        final_result = ""
+        all_agent_responses = []
 
         for i, role in enumerate(roles):
             print(f"[{i+1}/{len(roles)}] {role.name} 가동 중...")
@@ -182,6 +207,8 @@ class AgentOrchestrator:
                 response = await llm.ainvoke(retry_messages)
                 answer = response.content
             
+            all_agent_responses.append(f"[{role.name} ({role.role})]: {answer}")
+            
             # 백엔드에 현재 답변 전송
             is_final = (i == len(roles) - 1)
             print(f"{role.name}({role.role})의 답변: {answer}")
@@ -190,17 +217,30 @@ class AgentOrchestrator:
                 name=role.name,
                 role=role.role,
                 contents=answer,
-                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                is_final=False
             ))
             
             # 다음 단계를 위한 요약 업데이트
             if not is_final:
                 current_context = await self.summarize_content(current_context, answer)
-            else:
-                final_result = answer
-                print(f"최종 결과: {final_result}")
 
-        return {"status": "success", "result": final_result}
+        # 최종 결론 생성 및 전송
+        print("최종 결론 생성 중...")
+        final_summary = await self.generate_final_summary("\n\n".join(all_agent_responses))
+        
+        await self._send_to_backend(BackendUpdate(
+            topic_id=self.request.topic_id,
+            name="최종 결론",
+            role="System",
+            contents=final_summary,
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            is_final=True
+        ))
+        
+        print(f"최종 결론: {final_summary}")
+
+        return {"status": "success", "result": final_summary}
     
 @app.post("/agent/run")
 async def start_agents(request: AgentRequest):

@@ -1,5 +1,5 @@
 ---
-name: 버그
+name: 버그이슈
 about: 버그 발생 시 이 템플릿을 사용해 주세요
 title: "[BUG] "
 labels: bug

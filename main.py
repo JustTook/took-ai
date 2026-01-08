@@ -124,6 +124,7 @@ class AgentOrchestrator:
 
     async def generate_roles(self) -> List[AgentInfo]:
         """질문에 맞는 N개의 에이전트 역할을 생성"""
+
         parser = JsonOutputParser(pydantic_object=AgentInfo)
         
         messages = [
@@ -166,6 +167,7 @@ class AgentOrchestrator:
     
     async def generate_final_summary(self, all_answers: str) -> str:
         """모든 답변을 종합하여 최종 요약 생성"""
+
         messages = [
             SystemMessage(content=PROMPT_FINAL_SUMMARY_SYSTEM),
             HumanMessage(content=PROMPT_FINAL_SUMMARY_USER_TEMPLATE.format(
@@ -178,13 +180,12 @@ class AgentOrchestrator:
 
     async def run_workflow(self):
         """전체 순차 워크플로우 실행"""
+        
         if self.request.agent_auto:
             roles = await self.generate_roles()
         else:
             roles = self.request.agent_info
             
-        print(f"구성 완료: {[role.name for role in roles]}")
-        
         if self.request.topic_summary:
             current_context = f"이전 대화 요약: {self.request.topic_summary}"
         else:
@@ -246,8 +247,6 @@ class AgentOrchestrator:
             is_final=True
         ))
         
-        print(f"최종 결론: {final_summary}")
-
         return {"status": "success", "result": final_summary}
     
 @app.post("/agent/run/init")

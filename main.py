@@ -90,7 +90,6 @@ class AgentOrchestrator:
 
     async def _send_to_backend(self, data: BackendUpdate):
         """백엔드 서버로 데이터를 전송하는 유틸리티 함수"""
-        print(f"[Backend 전송] {data.role}의 답변 전송 중...")
 
         try:
             async with httpx.AsyncClient() as client:
@@ -101,7 +100,6 @@ class AgentOrchestrator:
                 )
                 
                 response.raise_for_status()
-                print(f"[Backend 전송 성공] {data.role}")
                 
         except httpx.HTTPStatusError as e:
             print(f"[Backend 응답 에러] 상태 코드: {e.response.status_code}")
@@ -149,8 +147,6 @@ class AgentOrchestrator:
         ]
         response = await llm.ainvoke(messages)
         summary = response.content.strip()
-        
-        print(f"[요약 완료]: {summary}\n")
 
         return summary
     
@@ -169,20 +165,14 @@ class AgentOrchestrator:
     async def run_workflow(self):
         """전체 순차 워크플로우 실행"""
         if self.request.agent_auto:
-            print(f"에이전트 팀 구성 중... (목표: {self.agent_count}명)")
             roles = await self.generate_roles()
         else:
-            print(f"수동 에이전트 설정 사용: {len(self.request.agent_info)}명")
             roles = self.request.agent_info
             
-        print(f"구성 완료: {[role.name for role in roles]}")
-        
         current_context = "시작 단계입니다."
         all_agent_responses = []
 
         for i, role in enumerate(roles):
-            print(f"[{i+1}/{len(roles)}] {role.name} 가동 중...")
-            
             # 에이전트 호출 메시지 구조
             agent_messages = [
                 SystemMessage(content=PROMPT_AGENT_SYSTEM_TEMPLATE.format(
@@ -211,7 +201,6 @@ class AgentOrchestrator:
             
             # 백엔드에 현재 답변 전송
             is_final = (i == len(roles) - 1)
-            print(f"{role.name}({role.role})의 답변: {answer}")
             await self._send_to_backend(BackendUpdate(
                 topic_id=self.request.topic_id,
                 name=role.name,
@@ -226,7 +215,6 @@ class AgentOrchestrator:
                 current_context = await self.summarize_content(current_context, answer)
 
         # 최종 결론 생성 및 전송
-        print("최종 결론 생성 중...")
         final_summary = await self.generate_final_summary("\n\n".join(all_agent_responses))
         
         await self._send_to_backend(BackendUpdate(

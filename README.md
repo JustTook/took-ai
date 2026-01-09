@@ -1,54 +1,66 @@
-# TookAi Crew
+# Took AI - Multi-Agent Server
 
-Welcome to the TookAi Crew project, powered by [crewAI](https://crewai.com). This template is designed to help you set up a multi-agent AI system with ease, leveraging the powerful and flexible framework provided by crewAI. Our goal is to enable your agents to collaborate effectively on complex tasks, maximizing their collective intelligence and capabilities.
+Google Gemini 기반의 멀티 에이전트 시스템을 위한 FastAPI 서버입니다.
+사용자의 질문에 맞춰 전문가 에이전트를 자동으로 구성하고, 토론을 통해 결론을 도출합니다.
 
-## Installation
+## 설정 (Configuration)
 
-Ensure you have Python >=3.10 <3.14 installed on your system. This project uses [UV](https://docs.astral.sh/uv/) for dependency management and package handling, offering a seamless setup and execution experience.
-
-First, if you haven't already, install uv:
-
-```bash
-pip install uv
-```
-
-Next, navigate to your project directory and install the dependencies:
-
-(Optional) Lock the dependencies and install them by using the CLI command:
-```bash
-crewai install
-```
-### Customizing
-
-**Add your `OPENAI_API_KEY` into the `.env` file**
-
-- Modify `src/took_ai/config/agents.yaml` to define your agents
-- Modify `src/took_ai/config/tasks.yaml` to define your tasks
-- Modify `src/took_ai/crew.py` to add your own logic, tools and specific args
-- Modify `src/took_ai/main.py` to add custom inputs for your agents and tasks
-
-## Running the Project
-
-To kickstart your crew of AI agents and begin task execution, run this from the root folder of your project:
+프로젝트 루트 디렉토리에 `.env` 파일을 생성하고 다음 환경 변수를 설정해주세요.
 
 ```bash
-$ crewai run
+# .env 예시
+GOOGLE_API_KEY=your_google_api_key_here
+BACKEND_URL=http://host.docker.internal:8000/agent/result
 ```
 
-This command initializes the took-ai Crew, assembling the agents and assigning them tasks as defined in your configuration.
+## 실행 방법 (Docker)
 
-This example, unmodified, will run the create a `report.md` file with the output of a research on LLMs in the root folder.
+Docker Compose를 사용하여 전체 서비스를 한 번에 실행할 수 있습니다.
 
-## Understanding Your Crew
+### 1. 서비스 시작
+터미널에서 다음 명령어를 실행하세요.
 
-The took-ai Crew is composed of multiple AI agents, each with unique roles, goals, and tools. These agents collaborate on a series of tasks, defined in `config/tasks.yaml`, leveraging their collective skills to achieve complex objectives. The `config/agents.yaml` file outlines the capabilities and configurations of each agent in your crew.
+```bash
+docker-compose up --build -d
+```
+> `-d` 옵션으로 백그라운드에서 실행합니다.
 
-## Support
+### 2. 로그 확인
+실행 중인 서버의 로그를 실시간으로 확인하려면:
 
-For support, questions, or feedback regarding the TookAi Crew or crewAI.
-- Visit our [documentation](https://docs.crewai.com)
-- Reach out to us through our [GitHub repository](https://github.com/joaomdmoura/crewai)
-- [Join our Discord](https://discord.com/invite/X4JWnZnxPb)
-- [Chat with our docs](https://chatg.pt/DWjSBZn)
+```bash
+docker-compose logs -f
+```
 
-Let's create wonders together with the power and simplicity of crewAI.
+### 3. 서비스 중지
+```bash
+docker-compose down
+```
+
+## API 사용 가이드
+
+서버가 실행되면 **5001번 포트**를 통해 접근할 수 있습니다.
+
+- **Base URL**: `http://localhost:5001`
+- **Swagger UI**: `http://localhost:5001/docs` (API 문서 및 테스트)
+
+## 로컬 환경 실행
+
+Docker 없이 직접 Python 환경에서 실행하려면:
+
+1. 가상환경 생성 및 활성화
+```bash
+python -m venv venv
+source venv/bin/activate  # Mac/Linux
+# venv\Scripts\activate  # Windows
+```
+
+2. 의존성 설치
+```bash
+pip install -r requirements.txt
+```
+
+3. 서버 실행
+```bash
+uvicorn main:app --reload --port 5001
+```

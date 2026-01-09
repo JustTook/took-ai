@@ -2,8 +2,8 @@ import os
 import httpx
 from datetime import datetime
 from dotenv import load_dotenv
-from typing import List
-from pydantic import BaseModel
+from typing import List, Optional
+from pydantic import BaseModel, field_validator
 from fastapi import FastAPI, HTTPException
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -70,6 +70,20 @@ class AgentRequest(BaseModel):
     topic_question: str
     agent_auto: bool
     agent_info: List[AgentInfo] = []
+    topic_summary: Optional[str] = None
+
+class AgentReplyRequest(BaseModel):
+    topic_id: str
+    topic_question: str
+    topic_summary: str
+    agent_info: List[AgentInfo]
+
+    @field_validator('topic_summary')
+    @classmethod
+    def check_summary_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('이전 대화 요약(topic_summary)은 필수입니다.')
+        return v
 
 class BackendUpdate(BaseModel):
     topic_id: str
@@ -110,6 +124,7 @@ class AgentOrchestrator:
 
     async def generate_roles(self) -> List[AgentInfo]:
         """질문에 맞는 N개의 에이전트 역할을 생성"""
+
         parser = JsonOutputParser(pydantic_object=AgentInfo)
         
         messages = [
@@ -152,6 +167,7 @@ class AgentOrchestrator:
     
     async def generate_final_summary(self, all_answers: str) -> str:
         """모든 답변을 종합하여 최종 요약 생성"""
+
         messages = [
             SystemMessage(content=PROMPT_FINAL_SUMMARY_SYSTEM),
             HumanMessage(content=PROMPT_FINAL_SUMMARY_USER_TEMPLATE.format(
@@ -164,12 +180,17 @@ class AgentOrchestrator:
 
     async def run_workflow(self):
         """전체 순차 워크플로우 실행"""
+        
         if self.request.agent_auto:
             roles = await self.generate_roles()
         else:
             roles = self.request.agent_info
             
-        current_context = "시작 단계입니다."
+        if self.request.topic_summary:
+            current_context = f"이전 대화 요약: {self.request.topic_summary}"
+        else:
+            current_context = "시작 단계입니다."
+            
         all_agent_responses = []
 
         for i, role in enumerate(roles):
@@ -226,11 +247,9 @@ class AgentOrchestrator:
             is_final=True
         ))
         
-        print(f"최종 결론: {final_summary}")
-
         return {"status": "success", "result": final_summary}
     
-@app.post("/agent/run")
+@app.post("/agent/run/init")
 async def start_agents(request: AgentRequest):
     if not request.agent_auto and not request.agent_info:
         raise HTTPException(status_code=400, detail="수동 모드 시 에이전트 정보가 필요합니다.")
@@ -239,6 +258,25 @@ async def start_agents(request: AgentRequest):
     try:
         result = await orchestrator.run_workflow()
         return result
+    except Exception as e:
+        print(f"서버 내부 에러: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/agent/run/reply")
+async def continue_agents(request: AgentReplyRequest):
+    # AgentReplyRequest를 AgentRequest로 변환 (수동 모드 고정)
+    internal_request = AgentRequest(
+        topic_id=request.topic_id,
+        topic_question=request.topic_question,
+        agent_auto=False,
+        agent_info=request.agent_info,
+        topic_summary=request.topic_summary
+    )
+
+    orchestrator = AgentOrchestrator(internal_request)
+    try:
+        await orchestrator.run_workflow()
+        return {"status": "success"}
     except Exception as e:
         print(f"서버 내부 에러: {e}")
         raise HTTPException(status_code=500, detail=str(e))

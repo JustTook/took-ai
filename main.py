@@ -104,11 +104,13 @@ class AgentOrchestrator:
 
     async def _send_to_backend(self, data: BackendUpdate):
         """백엔드 서버로 데이터를 전송하는 유틸리티 함수"""
+        
+        target_url = f"{self.backend_url}/agent/result"
 
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    self.backend_url, 
+                    target_url, 
                     json=data.model_dump(),
                     timeout=10.0
                 )
@@ -121,6 +123,28 @@ class AgentOrchestrator:
             print(f"[Backend 연결 실패] 서버가 꺼져 있거나 주소가 틀렸을 수 있습니다: {e}")
         except Exception as e:
             print(f"[기타 전송 에러] {e}")
+
+    async def _send_agent_list(self, roles: List[AgentInfo]):
+        """생성된 에이전트 리스트를 백엔드에 전송"""
+
+        try:
+            target_url = f"{self.backend_url}/agent/list"
+            
+            payload = {
+                "topic_id": self.request.topic_id,
+                "agent_info": [role.model_dump() for role in roles]
+            }
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    target_url,
+                    json=payload,
+                    timeout=10.0
+                )
+                response.raise_for_status()
+                
+        except Exception as e:
+            print(f"[Agent List 전송 실패] {e}")
 
     async def generate_roles(self) -> List[AgentInfo]:
         """질문에 맞는 N개의 에이전트 역할을 생성"""
@@ -183,6 +207,7 @@ class AgentOrchestrator:
         
         if self.request.agent_auto:
             roles = await self.generate_roles()
+            await self._send_agent_list(roles)
         else:
             roles = self.request.agent_info
             

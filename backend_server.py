@@ -10,5 +10,13 @@ def receive_agent_output():
 
     return '', 200
 
+@app.route('/agent/list', methods=['POST'])
+def receive_agent_list():
+    data = request.json
+    print("Received agent list:")
+    print(data)
+
+    return '', 200
+
 if __name__ == '__main__':
     app.run(port=8000)

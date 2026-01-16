@@ -4,7 +4,7 @@ services:
   agent-app:
     build: .
     ports:
-      - "5001:5000"
+      - "5050:5050"
     volumes:
       - .:/app
     environment:

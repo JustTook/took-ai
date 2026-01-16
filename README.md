@@ -39,10 +39,10 @@ docker-compose down
 
 ## API 사용 가이드
 
-서버가 실행되면 **5001번 포트**를 통해 접근할 수 있습니다.
+서버가 실행되면 **5050번 포트**를 통해 접근할 수 있습니다.
 
-- **Base URL**: `http://localhost:5001`
-- **Swagger UI**: `http://localhost:5001/docs` (API 문서 및 테스트)
+- **Base URL**: `http://localhost:5050`
+- **Swagger UI**: `http://localhost:5050/docs` (API 문서 및 테스트)
 
 ## 로컬 환경 실행
 
@@ -62,5 +62,5 @@ pip install -r requirements.txt
 
 3. 서버 실행
 ```bash
-uvicorn main:app --reload --port 5001
+uvicorn main:app --reload --port 5050
 ```
